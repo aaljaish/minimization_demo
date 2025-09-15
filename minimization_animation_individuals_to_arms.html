@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Minimization Demo – Age, Sex, Count</title>
+<style>
+  :root{
+    --primary:#006a78; /* teal */
+    --secondary:#1eaeba; /* aqua */
+    --bg:#f6fbfb;
+    --card:#ffffff;
+    --ink:#0f172a;
+    --muted:#64748b;
+    --good:#111111;
+    --bad:#cc1f1a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+  header{padding:20px 24px;background:linear-gradient(90deg,var(--primary),var(--secondary));color:white}
+  header h1{margin:0;font-size:22px;letter-spacing:.2px}
+  header p{margin:6px 0 0 0;opacity:.85}
+
+  .container{padding:20px 24px;max-width:1100px;margin:0 auto}
+  .controls{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+  .control{background:var(--card);padding:12px 14px;border-radius:12px;box-shadow:0 6px 16px rgba(0,0,0,.06);display:flex;align-items:center;gap:10px}
+  .control label{font-size:13px;color:var(--muted)}
+  .control input[type="number"], .control input[type="range"]{accent-color:var(--primary)}
+  .btn{border:0;background:var(--primary);color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:600}
+  .btn.secondary{background:var(--secondary);color:#013339}
+  .btn.ghost{background:#0000;color:var(--primary);border:1.5px solid var(--primary)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+
+  .stage{display:grid;grid-template-columns: 1.1fr .9fr;gap:20px}
+  .panel{background:var(--card);border-radius:16px;padding:16px;box-shadow:0 10px 24px rgba(0,0,0,.06)}
+  .panel h2{margin:0 0 8px 0;font-size:16px}
+  .sub{font-size:12px;color:var(--muted);margin-bottom:10px}
+
+  .recruit-stream{display:flex;flex-wrap:wrap;gap:10px;min-height:128px;padding:8px;border:1px dashed #d3e5e5;border-radius:12px}
+
+  .person{width:78px;height:48px;position:relative;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;font-weight:600;color:#0b2b2b;background:rgba(0,106,120,.08);border:1px solid rgba(0,106,120,.25);opacity:0;transform:translateY(-6px);animation:pop .5s forwards}
+  .person .pill{padding:2px 6px;border-radius:999px;font-size:11px;background:rgba(30,174,186,.12);border:1px solid rgba(30,174,186,.35)}
+  /* Top-right assignment mark */
+  .person .corner{position:absolute;top:4px;right:6px;font-weight:800;font-size:14px;color:var(--ink);opacity:.9}
+  @keyframes pop{to{opacity:1;transform:translateY(0)}}
+
+  .arms{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
+  .arm{border:1.5px solid rgba(0,106,120,.25);border-radius:12px;padding:10px;min-height:120px}
+  .arm h3{margin:0 0 8px 0;font-size:14px;color:var(--primary)}
+  .arm .slots{display:flex;flex-wrap:wrap;gap:8px}
+  .token{width:60px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:11px;background:rgba(0,106,120,.08);border:1px solid rgba(0,106,120,.25)}
+
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:10px 8px;text-align:left}
+  thead th{font-size:12px;color:var(--muted);border-bottom:1px solid #e6efef}
+  tbody td{border-bottom:1px solid #eef6f6}
+  .kpi{display:flex;gap:6px;align-items:center}
+  .kpi .dot{width:8px;height:8px;border-radius:999px;background:var(--secondary)}
+  .red{color:var(--bad)!important}
+  .muted{color:var(--muted)}
+
+  footer{padding:20px 24px;color:var(--muted);font-size:12px}
+  /* Hide legacy arm boxes */
+  .arms, .arm { display: none !important; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Minimization Animation · Age, Sex, Count</h1>
+    <p>First N participants (default 10) use simple randomization. From N+1 onward, minimization assigns to the arm that reduces overall imbalance.</p>
+  </header>
+
+  <div class="container">
+    <div class="controls">
+      <div class="control">
+        <label for="maxN">Max participants</label>
+        <input id="maxN" type="number" min="20" max="500" step="1" value="80" />
+      </div>
+      <div class="control">
+        <label for="seedN">First N randomized simply</label>
+        <input id="seedN" type="number" min="0" max="50" step="1" value="10" />
+      </div>
+      <div class="control" style="min-width:280px">
+        <label for="speed">Speed</label>
+        <input id="speed" type="range" min="100" max="1500" step="50" value="600" />
+        <span id="speedLbl" class="muted">600 ms</span>
+      </div>
+      <button id="startBtn" class="btn">Start</button>
+      <button id="pauseBtn" class="btn secondary" disabled>Pause</button>
+      <button id="resetBtn" class="btn ghost">Reset</button>
+    </div>
+
+    <div class="stage">
+      <section class="panel">
+        <h2>Recruitment Stream</h2>
+        <div class="sub">Each participant appears here, then is allocated to an arm.</div>
+        <div id="stream" class="recruit-stream"></div>
+        <div class="arms">
+          <div class="arm" id="armA">
+            <h3>Intervention</h3>
+            <div id="slotsA" class="slots"></div>
+          </div>
+          <div class="arm" id="armB">
+            <h3>Control</h3>
+            <div id="slotsB" class="slots"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Balance Dashboard</h2>
+        <div class="sub">Rows turn <span class="red" style="font-weight:700">red</span> when thresholds are exceeded.</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Baseline characteristic</th>
+              <th>Intervention</th>
+              <th>Control</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="rowAge">
+              <td class="kpi"><span class="dot"></span>Mean age</td>
+              <td id="ageA">–</td>
+              <td id="ageB">–</td>
+            </tr>
+            <tr id="rowSex">
+              <td class="kpi"><span class="dot"></span>% Female</td>
+              <td id="sexA">–</td>
+              <td id="sexB">–</td>
+            </tr>
+            <tr id="rowN">
+              <td class="kpi"><span class="dot"></span>N participants</td>
+              <td id="nA">0</td>
+              <td id="nB">0</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="sub" style="margin-top:10px">
+          Thresholds: |Δ mean age| ≤ 2 years; |Δ % female| ≤ 3%; |Δ N| ≤ 5.
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <footer class="container">Palette: <span style="color:var(--primary);font-weight:700">#006a78</span> · <span style="color:var(--secondary);font-weight:700">#1eaeba</span>. Demo logic: equal weights across age/sex/count for minimization scoring.</footer>
+
+<script>
+(function(){
+  const maxNEl = document.getElementById('maxN');
+  const seedNEl = document.getElementById('seedN');
+  const speedEl = document.getElementById('speed');
+  const speedLbl = document.getElementById('speedLbl');
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const stream = document.getElementById('stream');
+  const slotsA = document.getElementById('slotsA');
+  const slotsB = document.getElementById('slotsB');
+
+  const ageAEl = document.getElementById('ageA');
+  const ageBEl = document.getElementById('ageB');
+  const sexAEl = document.getElementById('sexA');
+  const sexBEl = document.getElementById('sexB');
+  const nAEl = document.getElementById('nA');
+  const nBEl = document.getElementById('nB');
+
+  const rowAge = document.getElementById('rowAge');
+  const rowSex = document.getElementById('rowSex');
+  const rowN = document.getElementById('rowN');
+
+  let timer=null, idx=0, participants=[], A=[], B=[];
+
+  function randInt(min,max){return Math.floor(Math.random()*(max-min+1))+min}
+  function sampleSex(){return Math.random()<0.5?'F':'M'}
+  function sampleAge(){return randInt(18,80)}
+
+  function makePerson(p){
+    const el = document.createElement('div');
+    el.className='person';
+    el.innerHTML = `<span class="pill">${p.sex}</span><span>${p.age}</span>`;
+    return el;
+  }
+
+  function makeToken(p){
+    const el = document.createElement('div');
+    el.className='token';
+    el.innerHTML = `<span class="pill">${p.sex}</span><span>${p.age}</span>`;
+    return el;
+  }
+
+  function mean(arr){if(arr.length===0) return NaN; return arr.reduce((s,x)=>s+x,0)/arr.length}
+
+  function updateDashboard(){
+    const agesA = A.map(p=>p.age), agesB = B.map(p=>p.age);
+    const meanA = mean(agesA), meanB = mean(agesB);
+    const nA = A.length, nB = B.length;
+    const fA = nA? (A.filter(p=>p.sex==='F').length/nA*100):0;
+    const fB = nB? (B.filter(p=>p.sex==='F').length/nB*100):0;
+
+    ageAEl.textContent = isNaN(meanA)? '–' : meanA.toFixed(1)+' yrs';
+    ageBEl.textContent = isNaN(meanB)? '–' : meanB.toFixed(1)+' yrs';
+    sexAEl.textContent = nA? fA.toFixed(1)+'%' : '–';
+    sexBEl.textContent = nB? fB.toFixed(1)+'%' : '–';
+    nAEl.textContent = nA; nBEl.textContent = nB;
+
+    // thresholds
+    const ageDiff = Math.abs((isNaN(meanA)?0:meanA) - (isNaN(meanB)?0:meanB));
+    const sexDiff = Math.abs(fA - fB);
+    const nDiff = Math.abs(nA - nB);
+
+    rowAge.classList.toggle('red', ageDiff>2);
+    rowSex.classList.toggle('red', sexDiff>3);
+    rowN.classList.toggle('red', nDiff>5);
+  }
+
+  function imbalanceScore(tmpA, tmpB){
+    const agesA = tmpA.map(p=>p.age), agesB = tmpB.map(p=>p.age);
+    const meanA = mean(agesA), meanB = mean(agesB);
+    const nA = tmpA.length, nB = tmpB.length;
+    const fA = nA? (tmpA.filter(p=>p.sex==='F').length/nA*100):0;
+    const fB = nB? (tmpB.filter(p=>p.sex==='F').length/nB*100):0;
+    const ageDiff = Math.abs((isNaN(meanA)?0:meanA) - (isNaN(meanB)?0:meanB));
+    const sexDiff = Math.abs(fA - fB); // percent pts
+    const nDiff = Math.abs(nA - nB);
+    // equal weights; scale age ~years, sex ~pct, count ~people
+    return ageDiff + sexDiff/3 + nDiff; // light scaling so sex doesn't dominate
+  }
+
+  function assign(p){
+    const seedN = parseInt(seedNEl.value,10);
+    if(idx < seedN){ // simple randomization
+      (Math.random()<0.5 ? A : B).push(p);
+    } else {
+      // try A
+      const scoreA = imbalanceScore([...A, p], [...B]);
+      const scoreB = imbalanceScore([...A], [...B, p]);
+      if (Math.abs(scoreA - scoreB) < 1e-6){ // tie → random
+        (Math.random()<0.5 ? A : B).push(p);
+      } else if (scoreA < scoreB){
+        A.push(p);
+      } else {
+        B.push(p);
+      }
+    }
+  }
+
+  function step(){
+    if(idx >= participants.length){
+      pause();
+      return;
+    }
+    const p = participants[idx];
+    const el = makePerson(p);
+    stream.appendChild(el);
+
+    // after a small delay, assign and annotate this participant
+    setTimeout(()=>{
+      assign(p);
+      const mark = document.createElement('span');
+      mark.className = 'corner';
+      mark.textContent = A.includes(p) ? 'I' : 'C';
+      el.appendChild(mark);
+      // keep existing token logic (hidden arm boxes) for compatibility
+      try{
+        const token = makeToken(p);
+        if (A.includes(p)) { if (typeof slotsA!== 'undefined' && slotsA) slotsA.appendChild(token); }
+        else { if (typeof slotsB!== 'undefined' && slotsB) slotsB.appendChild(token); }
+      }catch(e){}
+      updateDashboard();
+      idx++;
+    }, 250);
+  }
+
+  function run(){
+    const speed = parseInt(speedEl.value,10);
+    clearInterval(timer);
+    timer = setInterval(step, speed);
+  }
+
+  function start(){
+    if(timer) return; run();
+    startBtn.disabled = true; pauseBtn.disabled = false;
+  }
+  function pause(){
+    clearInterval(timer); timer=null; startBtn.disabled=false; pauseBtn.disabled=true;
+  }
+  function reset(){
+    pause(); idx=0; A=[]; B=[]; participants=[]; stream.innerHTML=''; slotsA.innerHTML=''; slotsB.innerHTML='';
+    const n = parseInt(maxNEl.value,10);
+    for(let i=0;i<n;i++) participants.push({ id:i+1, sex: sampleSex(), age: sampleAge()});
+    updateDashboard();
+  }
+
+  // events
+  startBtn.addEventListener('click', start);
+  pauseBtn.addEventListener('click', pause);
+  resetBtn.addEventListener('click', reset);
+  speedEl.addEventListener('input', ()=>{speedLbl.textContent = speedEl.value+' ms'; if(timer) run();});
+  maxNEl.addEventListener('change', reset);
+  seedNEl.addEventListener('change', reset);
+
+  // init
+  speedLbl.textContent = speedEl.value+' ms';
+  reset();
+})();
+</script>
+</body>
+</html>
